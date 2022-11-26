@@ -106,6 +106,8 @@ def grow_image(fil, outsize, seed_mode, winsize):
     plt.imsave('sample.png', sample[:,:,::-1])
     plt.imsave('image.png', img[:,:,::-1])
     #plt.imsave('mask.png', mask[:,:])
+
+    init_unfilled = np.count_nonzero(1-mask)
     
     while np.count_nonzero(1-mask) > 0:
         progress = 0
@@ -132,9 +134,12 @@ def grow_image(fil, outsize, seed_mode, winsize):
             
         if progress == 0:
             max_error_thresh *= 1.1
+
+        print(f'{np.count_nonzero(1-mask)}/{init_unfilled} Pixels need to be filled ... ')
         
     return img
 
 if __name__ == '__main__':
+    # python3 npts.py -i ../el_pattern.png -o nan -w 5 -sm 1 -os 94
     args = parse_args()
     img = grow_image(args.input, int(args.outputsize), int(args.seedmode), int(args.winsize))
