@@ -1,12 +1,23 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
 import cv2
 
 # reference for debugging?
 # https://github.com/goldbema/TextureSynthesis/blob/master/synthesis.py
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('-i', '--input', help='input file path')
+    parser.add_argument('-o', '--output', help='output file destination')
+    parser.add_argument('-w', '--winsize', help='window size')
+    parser.add_argument('-sm', '--seedmode', help='seed mode')
+    parser.add_argument('-os', '--outputsize', help='output file size')
 
+    args = parser.parse_args()
+
+    return args
 
 def prep_img(fil, outsize, seed_type):
     a = cv2.imread(fil)
@@ -91,7 +102,10 @@ def grow_image(fil, outsize, seed_mode, winsize):
 
     max_error_thresh = 0.3
 
-    sample,img,mask = prep_img(fil, outsize, seed_mode)
+    sample, img, mask = prep_img(fil, outsize, seed_mode)
+    plt.imsave('sample.png', sample[:,:,::-1])
+    plt.imsave('image.png', img[:,:,::-1])
+    #plt.imsave('mask.png', mask[:,:])
     
     while np.count_nonzero(1-mask) > 0:
         progress = 0
@@ -120,3 +134,7 @@ def grow_image(fil, outsize, seed_mode, winsize):
             max_error_thresh *= 1.1
         
     return img
+
+if __name__ == '__main__':
+    args = parse_args()
+    img = grow_image(args.input, int(args.outputsize), int(args.seedmode), int(args.winsize))
