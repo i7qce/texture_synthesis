@@ -1,19 +1,21 @@
 import numpy as np
 import matplotlib.pyplot as plt
+
 import argparse
+from tqdm.auto import tqdm
 
 import cv2
 
-# reference for debugging?
-# https://github.com/goldbema/TextureSynthesis/blob/master/synthesis.py
-
 def parse_args():
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('-i', '--input', help='input file path')
-    parser.add_argument('-o', '--output', help='output file destination')
-    parser.add_argument('-w', '--winsize', help='window size')
-    parser.add_argument('-sm', '--seedmode', help='seed mode')
-    parser.add_argument('-os', '--outputsize', help='output file size')
+
+    parser = argparse.ArgumentParser(description='Use non-parameteric texture synthesis to extend/grow textures.')
+
+    parser.add_argument('-i', '--input', help='input file path', default='input.png')
+    parser.add_argument('-o', '--output', help='output file path', default='output.png')
+    parser.add_argument('-w', '--winsize', help='window size', type=int, default=15)
+    parser.add_argument('-sm', '--seedmode', help='seed mode: 0 to start with whole image at top left, 1 with whole image at center, and a number n >= 2 to use an nxn block at the center', type=int, default = 1)
+    parser.add_argument('-os', '--outputsize', help='output file size in pixels (nxn)', type=int, default=128)
+    parser.add_argument('-p', '--partialsave', help='save intermediate images, 0 or 1', type=int, default=0)
 
     args = parser.parse_args()
 
@@ -83,11 +85,13 @@ def find_matches(template, template_mask, sample):
     SSD = cv2.matchTemplate(np.pad(sample, npad).astype(np.float32), template.astype(np.float32), cv2.TM_SQDIFF, None, gauss_mask.astype(np.float32))
     SSD = SSD / gauss_mask.sum()
 
-    print(f'S{sample.shape}')
-    print(f'S{template.shape}')
-    print(f'S{gauss_mask.shape}')
-    print(f'S{SSD.shape}')
+    #print(f'S{sample.shape}')
+    #print(f'S{template.shape}')
+    #print(f'S{gauss_mask.shape}')
+    #print(f'S{SSD.shape}')
 
+    # For some reason sometimes SSD comes out w/ small negative value?
+    SSD = abs(SSD)
 
     pixel_list = np.where((SSD <= SSD.min()*(1 + err_thresh)))
 
@@ -95,19 +99,25 @@ def find_matches(template, template_mask, sample):
 
     res = [pixel_list[0], pixel_list[1], tmp]
 
+    if len(list(zip(*res))) == 0:
+        import pdb
+        pdb.set_trace()
+
 
     return list(zip(*res))
 
-def grow_image(fil, outsize, seed_mode, winsize):
+def grow_image(fil, outsize, seed_mode, winsize, outfil, partial_save):
 
     max_error_thresh = 0.3
 
     sample, img, mask = prep_img(fil, outsize, seed_mode)
-    plt.imsave('sample.png', sample[:,:,::-1])
-    plt.imsave('image.png', img[:,:,::-1])
+    #plt.imsave('sample.png', sample[:,:,::-1])
+    #plt.imsave('image.png', img[:,:,::-1])
     #plt.imsave('mask.png', mask[:,:])
 
     init_unfilled = np.count_nonzero(1-mask)
+
+    pbar = tqdm(total=init_unfilled)
     
     while np.count_nonzero(1-mask) > 0:
         progress = 0
@@ -117,7 +127,7 @@ def grow_image(fil, outsize, seed_mode, winsize):
             template, template_mask = get_neighborhood_window(img, mask, winsize, pixel)
 
             best_matches = find_matches(template, template_mask, sample)
-            print(f'Found {len(best_matches)} matches')
+            #print(f'Found {len(best_matches)} matches')
 
             if len(best_matches):
                 best_match_choice = np.random.choice(range(len(best_matches)))
@@ -127,19 +137,33 @@ def grow_image(fil, outsize, seed_mode, winsize):
                     img[pixel[0], pixel[1]] = sample[best_match[0], best_match[1]]
                     mask[pixel[0], pixel[1]] = 1
                     progress = 1
-                    print('Replacing Pixel, outputting...')
+                    #print('Replacing Pixel, outputting...')
+                    #print(f'{np.count_nonzero(1-mask)}/{init_unfilled} Pixels need to be filled ... ')
+                    pbar.update(1)
 
                     #plt.imshow(img)
-                    plt.imsave('temp.png', img[:,:,::-1])
+                    if partial_save:
+                        plt.imsave(outfil, img[:,:,::-1])
             
         if progress == 0:
             max_error_thresh *= 1.1
-
-        print(f'{np.count_nonzero(1-mask)}/{init_unfilled} Pixels need to be filled ... ')
+        
+        #print(f'{np.count_nonzero(1-mask)}/{init_unfilled} Pixels need to be filled ... ')
         
     return img
 
 if __name__ == '__main__':
-    # python3 npts.py -i ../el_pattern.png -o nan -w 5 -sm 1 -os 94
+    # usage examples:
+    #
+    # python3 npts.py -i ../el_pattern.png -o output.png -w 5 -sm 1 -os 94
+    #
+    # python3 npts.py -i ../starry.jpg -o output.png -w 23 -sm 1 -os 1200
+    #
+    # python3 npts.py -i ../el_pattern.png
+    #
+    # python3 npts/npts.py -i test_images/brick.png -o test_outputs/brick4.png -w 27 -sm 9
+
     args = parse_args()
-    img = grow_image(args.input, int(args.outputsize), int(args.seedmode), int(args.winsize))
+
+    img = grow_image(args.input, args.outputsize, args.seedmode, args.winsize, args.output, args.partialsave)
+    plt.imsave(args.output, img[:,:,::-1])
